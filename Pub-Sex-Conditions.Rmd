@@ -1,0 +1,73 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r}
+# Importing libraries and data sheet
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+library(dplyr)
+library(foreign)
+library(jtools)
+library(interactions)
+library(leaps)
+library(mgcv)
+```
+
+```{r}
+Pub_data <- read_excel("Documents/Data-Pub.OFT.PFC.NAc.Cyt.xlsx", sheet = "Only Puberty")
+
+ggplot(Pub_data, aes(fill = Sex, y = `Pub Full`, x = `Group`)) + 
+  geom_bar(position="dodge", stat="identity", width = .5) +
+  facet_wrap(~ `Sal/LPS` + `Veh/Ibu`) +
+  labs(title = "Days to Reach Full Puberty by Sex, Condition, LPS, and Ibu")
+
+ggplot(Pub_data, aes(fill = Sex, y = `Pub Initiation`, x = `Group`)) + 
+  geom_bar(position="dodge", stat="identity", width = .5) +
+  facet_wrap(~ `Sal/LPS` + `Veh/Ibu`) +
+  labs(title = "Days to Initiate Puberty by Sex, Condition, LPS, and Ibu")
+```
+```{r}
+# Making visual chart of distribution and correlation values between all variables
+pairs.panels(Pub_data[c("Group", "Sex", "Sal/LPS", "Veh/Ibu", "Pub Initiation", "Pub Full")])
+```
+
+
+```{r}
+full_lmodel <- lm(`Pub Full` ~ `Sex` * `Group` * `Sal/LPS` * `Veh/Ibu`, data = Pub_data, na.action = na.omit)
+full_lmodel
+ggqqplot(residuals(full_lmodel))
+shapiro_test(residuals(full_lmodel))
+summary(full_lmodel)
+summ(full_lmodel)
+anova(full_lmodel)
+plot(full_lmodel)
+```
+
+```{r}
+full_amodel <- gam("Pub Full" ~ Sex, data = Pub_data)
+summary(full_amodel)
+summ(full_amodel)
+anova(full_amodel)
+plot(full_amodel)
+```
+
+
+```{r}
+initiation_model <- lm(`Pub Initiation` ~ `Sex` * `Group` * `Sal/LPS` * `Veh/Ibu`, data = Pub_data, na.action = na.omit)
+initiation_model
+ggqqplot(residuals(initiation_model))
+shapiro_test(residuals(initiation_model))
+summary(initiation_model)
+summ(initiation_model)
+anova(initiation_model)
+plot(initiation_model)
+```
+
+

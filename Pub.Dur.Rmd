@@ -1,0 +1,323 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r}
+# Importing libraries and data sheet
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+library(dplyr)
+library(foreign)
+library(jtools)
+library(interactions)
+library(leaps)
+library(mgcv)
+library(car)
+library(corrplot)
+library(RColorBrewer)
+library(effects)
+library(gridExtra)
+Data <- read_excel("Data-Pub.OFT.PFC.NAc.Cyt.xlsx", sheet = "MinusOFT")
+summary(Data)
+```
+
+```{r}
+# Creating variable for puberty duration
+Data$Pub.Dur <- Data$Pub.Full - Data$Pub.Initiation
+
+# Creating subset of data
+data_Sal.Veh <- Data %>%
+  filter(`Sal.LPS` =="Sal", `Veh.Ibu` == "Veh")
+
+data_Sal.Ibu <- Data %>%
+  filter(`Sal.LPS` =="Sal", `Veh.Ibu` == "Ibu")
+
+data_LPS.Veh <- Data %>%
+  filter(`Sal.LPS` =="LPS", `Veh.Ibu` == "Veh")
+
+data_LPS.Ibu <- Data %>%
+  filter(`Sal.LPS` =="LPS", `Veh.Ibu` == "Ibu")
+```
+
+```{r}
+# Saving names of column variables
+DV <- colnames(Data[6:20])
+IV <- colnames(Data[2:5])
+Pub <- colnames(Data[6:7])
+Pub[3] <- "Pub.Dur"
+OFT <- colnames(Data[8])
+Brain <- colnames(Data[9:20])
+```
+
+# Puberty duration vs initiation
+```{r}
+pd_model <- lm(Pub.Dur ~ Pub.Initiation, data = Data)
+summ(pd_model)
+
+effect_plot(pd_model, pred = Pub.Initiation, interval = TRUE, plot.points = TRUE)
+
+ggplot(Data, aes(x = `Pub.Initiation`, y = `Pub.Dur`)) +
+      geom_point(aes(x = `Pub.Initiation`, y = `Pub.Dur`, color = `Group`), shape = 21) +
+      stat_smooth(method = "lm", formula = y ~ x, aes(fill = factor(`Group`), color = `Group`)) +
+      facet_wrap(~ Sex)
+```
+
+# Puberty duration vs full
+```{r}
+pd_model <- lm(Pub.Dur ~ Pub.Full, data = Data)
+summ(pd_model)
+
+effect_plot(pd_model, pred = Pub.Full, interval = TRUE, plot.points = TRUE)
+
+ggplot(Data, aes(y = `Pub.Full`, x = `Pub.Dur`)) +
+      geom_point(aes(y = `Pub.Full`, x = `Pub.Dur`, color = `Group`), shape = 21) +
+      stat_smooth(method = "lm", formula = y ~ x, aes(fill = factor(`Group`), color = `Group`)) +
+      facet_wrap(~ Sex)
+```
+
+```{r}
+# Plotting lm for Pub duration
+for (i in Brain){
+  j <- paste("`", i, "`", sep = "")
+  plot <- ggplot(Data, aes_string(x = "`Pub.Dur`", y = j)) +
+      geom_point(aes_string(x = "`Pub.Dur`", y = j, color = "`Sex`"), shape = 21) +
+      stat_smooth(method = "lm", formula = y ~ x) + #aes(fill = factor(`Sex`)), col = "black") +
+      facet_wrap(~ `Sal.LPS` + `Veh.Ibu`) +
+      labs(title = (paste(i, "by Pub Duration, Sex, Condition, LPS, and Ibu", sep = " ")))
+  print(plot)
+}
+```
+
+```{r}
+# Plotting lm for Pub duration
+for (i in Brain){
+  p1 <- effect_plot(lm(paste(i," ~ Pub.Dur", sep = ""), data = data_Sal.Veh), 
+                    pred = Pub.Dur, interval = TRUE, plot.points = TRUE, main.title = "Sal/Veh")
+  p2 <- effect_plot(lm(paste(i," ~ Pub.Dur", sep = ""), data = data_Sal.Ibu), 
+                    pred = Pub.Dur, interval = TRUE, plot.points = TRUE, main.title = "Sal/Ibu")
+  p3 <- effect_plot(lm(paste(i," ~ Pub.Dur", sep = ""), data = data_LPS.Veh), 
+                    pred = Pub.Dur, interval = TRUE, plot.points = TRUE, main.title = "LPS/Veh")
+  p4 <- effect_plot(lm(paste(i," ~ Pub.Dur", sep = ""), data = data_LPS.Ibu), 
+                    pred = Pub.Dur, interval = TRUE, plot.points = TRUE, main.title = "LPS/Ibu")
+  grid.arrange(p1, p2, p3, p4, ncol=2)
+}
+```
+
+# Analyses with the Saline/Veh group
+```{r}
+# Setting color scheme for future plots
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+
+# Running pearson correlation
+M.pearson <-cor(data_Sal.Veh[,6:21], use = "na.or.complete", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with Sal/Veh rats
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Pub.Dur`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Dur`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+```{r}
+SV.NAc.TNF.FC <- lm(NAc.TNF.FC ~ Pub.Dur, data = data_Sal.Veh) # stat significant
+summary(SV.NAc.TNF.FC)
+effect_plot(SV.NAc.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+SV.PFC.TNF.FC <- lm(PFC.GluA2.FC ~ Pub.Dur, data = data_Sal.Veh) #stat unsignificant
+summary(SV.PFC.TNF.FC)
+effect_plot(SV.PFC.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+```
+
+```{r}
+# Plotting lm for Pub duration/initiation/full
+for (i in Brain){
+  p1 <- effect_plot(lm(paste(i," ~ Pub.Dur", sep = ""), data = data_Sal.Veh), 
+                    pred = Pub.Dur, interval = TRUE, plot.points = TRUE, main.title = "Pub Duration")
+  p2 <- effect_plot(lm(paste(i," ~ Pub.Initiation", sep = ""), data = data_Sal.Veh), 
+                    pred = Pub.Initiation, interval = TRUE, plot.points = TRUE, main.title = "Pub Initiation")
+  p3 <- effect_plot(lm(paste(i," ~ Pub.Full", sep = ""), data = data_Sal.Veh), 
+                    pred = Pub.Full, interval = TRUE, plot.points = TRUE, main.title = "Pub Full")
+  grid.arrange(p1, p2, p3, ncol = 3)
+}
+```
+
+# Analyses with the Saline/Ibu group
+```{r}
+# Running pearson correlation
+M.pearson <-cor(data_Sal.Ibu[,6:21], use = "na.or.complete", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with Sal/Ibu rats
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Dur`", sep = "")), data = data_Sal.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+```{r}
+SI.NAc.TNF.FC <- lm(NAc.TNF.FC ~ Pub.Dur, data = data_Sal.Ibu)
+summary(SI.NAc.TNF.FC)
+effect_plot(SI.NAc.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+SI.PFC.TNF.FC <- lm(PFC.TNF.FC ~ Pub.Dur, data = data_Sal.Ibu)
+summary(SI.PFC.TNF.FC)
+effect_plot(SI.PFC.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+SI.PFC.GluA2.rel.O.D. <- lm(PFC.GluA2.rel.O.D. ~ Pub.Dur, data = data_Sal.Ibu)
+summary(SI.PFC.GluA2.rel.O.D.)
+effect_plot(SI.PFC.GluA2.rel.O.D., pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+SI.PFC.GluA2.FC <- lm(PFC.GluA2.FC ~ Pub.Dur, data = data_Sal.Ibu)
+summary(SI.PFC.GluA2.FC)
+effect_plot(SI.PFC.GluA2.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+```
+```{r}
+# Plotting lm for Pub duration/initiation/full
+for (i in Brain){
+  p1 <- effect_plot(lm(paste(i," ~ Pub.Dur", sep = ""), data = data_Sal.Ibu), 
+                    pred = Pub.Dur, interval = TRUE, plot.points = TRUE, main.title = "Pub Duration")
+  p2 <- effect_plot(lm(paste(i," ~ Pub.Initiation", sep = ""), data = data_Sal.Ibu), 
+                    pred = Pub.Initiation, interval = TRUE, plot.points = TRUE, main.title = "Pub Initiation")
+  p3 <- effect_plot(lm(paste(i," ~ Pub.Full", sep = ""), data = data_Sal.Ibu), 
+                    pred = Pub.Full, interval = TRUE, plot.points = TRUE, main.title = "Pub Full")
+  grid.arrange(p1, p2, p3, ncol = 3)
+}
+```
+
+# Analyses with the LPS/Veh group
+```{r}
+# Running pearson correlation
+M.pearson <-cor(data_LPS.Veh[,6:21], use = "na.or.complete", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with LPS/Veh rats
+
+Brain.2 <- Brain[- c(4, 5, 6)] # without values for NAc western blot
+Brain.3 <- Brain[- c(1,2,3,7,8,9,10,11,12)] # values for NAc western blot
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Group` + `Pub.Dur`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Dur`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+```{r}
+LV.PFC.TNF.FC <- lm(PFC.TNF.FC ~ Pub.Dur, data = data_LPS.Veh)
+summary(LV.PFC.TNF.FC)
+effect_plot(LV.PFC.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+LV.PFC.TNF.FC.sexgroup <- lm(PFC.TNF.FC ~ Sex + Group + Pub.Dur, data = data_LPS.Veh)
+summary(LV.PFC.TNF.FC.sexgroup)
+effect_plot(LV.PFC.TNF.FC.sexgroup, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+LV.NAc.GluA2.FC <- lm(NAc.GluA2.FC ~ Pub.Dur, data = data_LPS.Veh)
+summary(LV.NAc.GluA2.FC)
+effect_plot(LV.NAc.GluA2.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+LV.NAc.GluA2.FC <- lm(NAc.GluA2.FC ~ Sex + Group + Pub.Dur, data = data_LPS.Veh)
+summary(LV.NAc.GluA2.FC)
+effect_plot(LV.NAc.GluA2.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+LV.NAc.TNF.FC <- lm(NAc.TNF.FC ~ Sex + Group + Pub.Dur, data = data_LPS.Veh)
+summary(LV.NAc.TNF.FC)
+effect_plot(LV.NAc.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+LV.PFC.GluA2.rel.O.D. <- lm(PFC.GluA2.rel.O.D. ~ Sex + Group + Pub.Dur, data = data_LPS.Veh)
+summary(LV.PFC.GluA2.rel.O.D.)
+effect_plot(LV.PFC.GluA2.rel.O.D., pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+```
+
+# Analyses with the LPS/Ibu group
+```{r}
+# Running pearson correlation
+M.pearson <-cor(data_LPS.Ibu[,6:21], use = "pairwise.complete.obs", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with LPS/Ibu rats
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Pub.Dur`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Group` + `Pub.Dur`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# lm with each brain measure as a function of pub duration
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  lm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Dur`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+```{r}
+LI.PFC.TNF.FC <- lm(PFC.TNF.FC ~ Pub.Dur, data = data_LPS.Ibu)
+summary(LI.PFC.TNF.FC)
+effect_plot(LI.PFC.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+LI.PFC.TNF.FC.sexgroup <- lm(PFC.TNF.FC ~ Sex + Group + Pub.Dur, data = data_LPS.Ibu)
+summary(LI.PFC.TNF.FC.sexgroup)
+effect_plot(LI.PFC.TNF.FC.sexgroup, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+
+LI.NAc.GluA2.FC <- lm(NAc.GluA2.FC ~ Pub.Dur, data = data_LPS.Ibu)
+summary(LI.NAc.GluA2.FC)
+effect_plot(LI.NAc.GluA2.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+
+LI.NAc.TNF.FC <- lm(NAc.TNF.FC ~ Pub.Dur, data = data_LPS.Ibu)
+summary(LI.NAc.TNF.FC)
+effect_plot(LI.NAc.TNF.FC, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+
+LI.NAc.TNF.FC.sexgroup <- lm(NAc.TNF.FC ~ Sex + Group + Pub.Dur, data = data_LPS.Ibu)
+summary(LI.NAc.TNF.FC.sexgroup)
+effect_plot(LI.NAc.TNF.FC.sexgroup, pred = Pub.Dur, interval = TRUE, plot.points = TRUE)
+```

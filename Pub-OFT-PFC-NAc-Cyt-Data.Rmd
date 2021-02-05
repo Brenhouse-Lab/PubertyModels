@@ -1,0 +1,505 @@
+---
+title: "Data-Pub-OFT-PFC-NAc-Cyt"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+---
+```{r}
+# Importing libraries and data sheet
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+library(dplyr)
+library(foreign)
+library(jtools)
+library(interactions)
+library(leaps)
+library(mgcv)
+library(car)
+library(corrplot)
+library(RColorBrewer)
+library(effects)
+Data <- read_excel("Data-Pub.OFT.PFC.NAc.Cyt.xlsx", sheet = "MinusOFT")
+summary(Data)
+```
+
+```{r}
+# Saving names of column variables
+DV <- colnames(Data[6:20])
+IV <- colnames(Data[2:5])
+Pub <- colnames(Data[6:7])
+OFT <- colnames(Data[8])
+Brain <- colnames(Data[9:20])
+```
+
+```{r}
+# Creating variable for puberty duration
+Data$Pub.Dur <- Data$Pub.Full - Data$Pub.Initiation
+```
+
+```{r}
+# Making function to graph represent data for each DV
+for (i in DV){
+  j <- paste("`", i, "`", sep = "")
+  plot <- ggplot(Data, aes_string(x = "`Group`", y = j, fill = "`Sex`")) +
+      geom_bar(position = "dodge", stat = "summary", width = 0.8) +
+      geom_errorbar(stat = "summary", position = "dodge", width = 0.8) +
+      geom_point(aes_string(x = "`Group`", y = j, color = "`Sex`"), shape = 21, position = position_jitterdodge(jitter.width = 0.2, jitter.height=0.2, dodge.width=0.9)) +
+      scale_color_manual(values=c("black","blue")) +
+      facet_wrap(~ `Sal.LPS` + `Veh.Ibu`) +
+      labs(title = (paste(i, "by Sex, Condition, LPS, and Ibu", sep = " ")))
+  print(plot)
+}
+```
+```{r}
+# Plotting glm for Pub duration
+for (i in Brain){
+  j <- paste("`", i, "`", sep = "")
+  plot <- ggplot(Data, aes_string(x = "`Pub.Dur`", y = j)) +
+      geom_point(aes_string(x = "`Pub.Dur`", y = j, color = "`Sex`"), shape = 21) +
+      stat_smooth(method = "glm", formula = y ~ x) + #aes(fill = factor(`Sex`)), col = "black") +
+      facet_wrap(~ `Sal.LPS` + `Veh.Ibu`) +
+      labs(title = (paste(i, "by Pub Duration, Sex, Condition, LPS, and Ibu", sep = " ")))
+  print(plot)
+}
+```
+
+```{r}
+# Plotting glm for Pub initiation
+for (i in Brain){
+  j <- paste("`", i, "`", sep = "")
+  plot <- ggplot(Data, aes_string(x = "`Pub.Initiation`", y = j)) +
+      geom_point(aes_string(x = "`Pub.Initiation`", y = j, color = "`Sex`"), shape = 21) +
+      stat_smooth(method = "glm", formula = y ~ x) + #aes(fill = factor(`Sex`)), col = "black") +
+      facet_wrap(~ `Sal.LPS` + `Veh.Ibu`) +
+      labs(title = (paste(i, "by Pub Initiation, Sex, Condition, LPS, and Ibu", sep = " ")))
+  print(plot)
+}
+```
+
+```{r}
+# Plotting glm for Pub full
+for (i in Brain){
+  j <- paste("`", i, "`", sep = "")
+  plot <- ggplot(Data, aes_string(x = "`Pub.Full`", y = j)) +
+      geom_point(aes_string(x = "`Pub.Full`", y = j, color = "`Sex`", shape = "`Group`"), shape = 21) +
+      stat_smooth(method = "glm", formula = y ~ x) + #aes(fill = factor(`Sex`)), col = "blue") +
+      facet_wrap(~ `Sal.LPS` + `Veh.Ibu`) +
+      labs(title = (paste(i, "by Pub Full, Sex, Condition, LPS, and Ibu", sep = " ")))
+  print(plot)
+}
+```
+
+```{r}
+# anova with each brain measure as a function of sex, group, sal/lps, and veh/ibu
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  aov(as.formula(paste(b," ~ `Sex` + `Group` + `Sal.LPS` + `Veh.Ibu`", sep = "")), data = Data) %>%
+    anova() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+
+
+# Analyses with the Saline/Veh group
+```{r}
+data_Sal.Veh <- Data %>%
+  filter(`Sal.LPS` =="Sal", `Veh.Ibu` == "Veh")
+
+# Setting color scheme for future plots
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+
+# Running pearson correlation
+M.pearson <-cor(data_Sal.Veh[,6:20], use = "na.or.complete", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+
+# Running spearman correlation
+M.spearman <-cor(data_Sal.Veh[,6:20], use = "na.or.complete", method = c("spearman"))
+M.spearman
+corrplot(M.spearman, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with Sal/Veh rats
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full, and OFT inner freq
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation, and OFT inner freq
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `OFT.Inner.F`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full, and OFT inner freq
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_Sal.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+
+# Analyses with the Saline/Ibu group
+```{r}
+# Creating subset of data
+data_Sal.Ibu <- Data %>%
+  filter(`Sal.LPS` =="Sal", `Veh.Ibu` == "Ibu")
+
+# Running pearson correlation
+M.pearson <-cor(data_Sal.Ibu[,6:20], use = "na.or.complete", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+
+# Running spearman correlation
+M.spearman <-cor(data_Sal.Ibu[,6:20], use = "na.or.complete", method = c("spearman"))
+M.spearman
+corrplot(M.spearman, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with Sal/Ibu rats
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full`", sep = "")), data = data_Sal.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full, and OFT inner freq
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_Sal.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation`", sep = "")), data = data_Sal.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation, and OFT inner freq
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `OFT.Inner.F`", sep = "")), data = data_Sal.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full, and OFT inner freq
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_Sal.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full
+lapply(Brain, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full`", sep = "")), data = data_Sal.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+
+# Analyses with the LPS/Veh group
+```{r}
+data_LPS.Veh <- Data %>%
+  filter(`Sal.LPS` =="LPS", `Veh.Ibu` == "Veh")
+
+# Running pearson correlation
+M.pearson <-cor(data_LPS.Veh[,6:20], use = "na.or.complete", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+
+# Running spearman correlation
+M.spearman <-cor(data_LPS.Veh[,6:20], use = "na.or.complete", method = c("spearman"))
+M.spearman
+corrplot(M.spearman, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with LPS/Veh rats
+
+Brain.2 <- Brain[- c(4, 5, 6)] # without values for NAc western blot
+Brain.3 <- Brain[- c(1,2,3,7,8,9,10,11,12)] # values for NAc western blot
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full, and OFT inner freq
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation, and OFT inner freq
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `OFT.Inner.F`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full, and OFT inner freq
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_LPS.Veh) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# Creating data set of only males in the LPS/veh group
+data_LPS.Veh.males <- data_LPS.Veh %>%
+  filter(`Sex` == "Male")
+
+# GLM with each brain measure as a function of sex, group, puberty init
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Initiation`", sep = "")), data = data_LPS.Veh.males) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty init, and OFT inner freq
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Initiation` + `OFT.Inner.F`", sep = "")), data = data_LPS.Veh.males) %>%
+    summary() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Full`", sep = "")), data = data_LPS.Veh.males) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full, and OFT inner freq
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_LPS.Veh.males) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+
+# Analyses with the LPS/Ibu group
+```{r}
+data_LPS.Ibu <- Data %>%
+  filter(`Sal.LPS` =="LPS", `Veh.Ibu` == "Ibu")
+
+# Running pearson correlation
+M.pearson <-cor(data_LPS.Ibu[,6:20], use = "pairwise.complete.obs", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+
+# Running spearman correlation
+M.spearman <-cor(data_LPS.Ibu[,6:20], use = "na.or.complete", method = c("pearson"))
+M.spearman
+corrplot(M.spearman, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running multiple regressions with LPS/Ibu rats
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation/full, and OFT inner freq
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty initiation, and OFT inner freq
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Initiation` + `OFT.Inner.F`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full, and OFT inner freq
+lapply(Brain.2, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Sex` + `Group` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_LPS.Ibu) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# Creating data set of only males in the LPS/veh group
+data_LPS.Ibu.males <- data_LPS.Ibu %>%
+  filter(`Sex` == "Male")
+
+# GLM with each brain measure as a function of sex, group, puberty init
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Initiation`", sep = "")), data = data_LPS.Ibu.males) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty init, and OFT inner freq
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Initiation` + `OFT.Inner.F`", sep = "")), data = data_LPS.Ibu.males) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Full`", sep = "")), data = data_LPS.Ibu.males) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+
+# GLM with each brain measure as a function of sex, group, puberty full, and OFT inner freq
+lapply(Brain.3, function(x){
+  b <- paste("`", x, "`", sep = "")
+  glm(as.formula(paste(b," ~ `Group` + `Pub.Full` + `OFT.Inner.F`", sep = "")), data = data_LPS.Ibu.males) %>%
+    summ() #change this between summary(), summ(), anova(), and plot() to see each data representation
+})
+```
+
+```{r}
+# New dataset with only the saline animals
+data_Sal.Ibu.Veh <- Data %>%
+  filter(Sal.LPS == "Sal")
+
+# Running pearson correlation
+M.pearson <-cor(data_Sal.Ibu.Veh[,6:20], use = "pairwise.complete.obs", method = c("pearson"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+
+# Running spearman correlation
+M.pearson <-cor(data_Sal.Ibu.Veh[,6:20], use = "pairwise.complete.obs", method = c("spearman"))
+M.pearson
+corrplot(M.pearson, method="circle", col=col(200),  
+         type="full", #order="hclust",
+         tl.col="black", tl.srt=45) #Text label color and rotation
+```
+```{r}
+# Running analyses with Saline rats
+
+# Plotting glm for Pub full
+for (i in Brain){
+  j <- paste("`", i, "`", sep = "")
+  plot <- ggplot(data_Sal.Ibu.Veh, aes_string(x = "`Pub.Full`", y = j)) +
+      geom_point(aes_string(x = "`Pub.Full`", y = j, color = "`Sex`"), shape = 21) +
+      stat_smooth(method = "glm", formula = y ~ x, aes(fill = factor(`Sex`)), col = "blue") +
+      facet_wrap(~ `Veh.Ibu`) +
+      labs(title = (paste(i, "by Pub Full, Sex, Condition, and Ibu", sep = " ")))
+  print(plot)
+}
+
+# Plotting glm for Pub init
+for (i in Brain){
+  j <- paste("`", i, "`", sep = "")
+  plot <- ggplot(data_Sal.Ibu.Veh, aes_string(x = "`Pub.Initiation`", y = j)) +
+      geom_point(aes_string(x = "`Pub.Initiation`", y = j, color = "`Sex`"), shape = 21) +
+      stat_smooth(method = "glm", formula = y ~ x, aes(fill = factor(`Sex`)), col = "blue") +
+      facet_wrap(~ `Veh.Ibu`) +
+      labs(title = (paste(i, "by Pub Initiation, Sex, Condition, and Ibu", sep = " ")))
+  print(plot)
+}
+```
+
+
+
+----
+
+```{r}
+# Testing for outliers
+#for (i in 1:(length(DV))){
+#  assign((paste(DV[i], "outliers", sep = "_")), (Data %>% identify_outliers(DV[i])))
+#}
+```
+ 
+```{r}
+# Testing for normality
+# ggqqplot(residuals("model name"))
+# shapiro_test(residuals(model name"))
+```
+
+```{r}
+# Testing for homogeneity
+# fligner.test(`NAc TNF FC` ~ `Group`, Data)
+```
+
+
+
